@@ -1,0 +1,196 @@
+// scripts/minikube_setup.ps1
+# PowerShell script for Windows setup
+Write-Host "Setting up Minikube environment..."
+
+# Check if Minikube is installed
+if (!(Get-Command minikube -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Minikube..."
+    choco install minikube
+}
+
+# Start Minikube
+minikube start --cpus 2 --memory 4096
+
+# Enable required addons
+minikube addons enable ingress
+minikube addons enable metrics-server
+
+# Set Docker environment to use Minikube's Docker daemon
+Write-Host "Configuring Docker environment..."
+minikube docker-env | Invoke-Expression
+
+# Build the Docker image
+Write-Host "Building Docker image..."
+docker build -t tmf632-service:latest .
+
+# Apply Kubernetes configurations
+Write-Host "Applying Kubernetes configurations..."
+kubectl apply -f deployment/k8s/
+
+# Wait for pods to be ready
+Write-Host "Waiting for pods to be ready..."
+kubectl wait --for=condition=ready pod -l app=tmf632-service --timeout=300s
+
+Write-Host "Setup complete! Use 'minikube service tmf632-service --url' to get the service URL"
+
+// test/api/postman/TMF632_Collection.json
+{
+	"info": {
+		"_postman_id": "unique-id-here",
+		"name": "TMF632 Party Management API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Individual",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"PATY000001\",\n    \"title\": \"Mr.\",\n    \"givenName\": \"John\",\n    \"familyName\": \"Doe\",\n    \"maritalStatus\": \"S\",\n    \"gender\": \"M\",\n    \"nationality\": \"USA\",\n    \"contactMedium\": [\n        {\n            \"type\": \"PhoneContactMedium\",\n            \"mediumType\": \"homePhoneNumber\",\n            \"preferred\": true,\n            \"phoneNumber\": \"1234567890\"\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/tmf-api/partyManagement/v4/individual",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"tmf-api",
+						"partyManagement",
+						"v4",
+						"individual"
+					]
+				}
+			}
+		},
+		{
+			"name": "Get Individual",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/tmf-api/partyManagement/v4/individual/{{individualId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"tmf-api",
+						"partyManagement",
+						"v4",
+						"individual",
+						"{{individualId}}"
+					]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080"
+		},
+		{
+			"key": "individualId",
+			"value": "PATY000001"
+		}
+	]
+}
+
+// scripts/generate_swagger.sh
+#!/bin/bash
+
+# Install swag if not present
+if ! command -v swag &> /dev/null
+then
+    echo "Installing swag..."
+    GO111MODULE=on go get -u github.com/swaggo/swag/cmd/swag
+fi
+
+# Generate swagger documentation
+echo "Generating Swagger documentation..."
+swag init -g cmd/server/main.go -o api/swagger
+
+echo "Swagger documentation generated successfully!"
+
+// deployment/k8s/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tmf632-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tmf632-service
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 50
+
+// deployment/docker/nginx/nginx.conf
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream tmf632_service {
+        server tmf632-service:8080;
+    }
+
+    server {
+        listen 80;
+        server_name localhost;
+
+        location /tmf-api/partyManagement/v4/ {
+            proxy_pass http://tmf632_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /metrics {
+            proxy_pass http://tmf632_service;
+        }
+
+        location /health {
+            proxy_pass http://tmf632_service;
+        }
+    }
+}
+
+// api/swagger/swagger.yaml
+openapi: 3.0.0
+info:
+  title: TMF632 Party Management API
+  version: 4.0.0
+  description: TMF632 Party Management API implementation
+paths:
+  /tmf-api/partyManagement/v4/individual:
+    post:
+      summary: Create individual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Individual'
+      responses:
+        '201':

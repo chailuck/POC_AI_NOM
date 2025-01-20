@@ -1,0 +1,60 @@
+// docker-compose.override.yml
+version: '3.8'
+
+services:
+  app:
+    environment:
+      - GO_ENV=development
+    volumes:
+      - .:/app
+    command: go run cmd/server/main.go
+
+  db:
+    ports:
+      - "5432:5432"
+
+// .gitignore
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go workspace file
+go.work
+
+# Environment files
+.env
+.env.*
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Build directory
+build/
+bin/

@@ -1,0 +1,251 @@
+# Complete Deployment Guide for TMF632 Service
+
+## Windows Deployment with Minikube
+
+### 1. Prerequisites Installation
+
+```powershell
+# Install Chocolatey if not already installed
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+# Install required tools
+choco install -y kubernetes-cli
+choco install -y minikube
+choco install -y docker-desktop
+```
+
+### 2. Environment Setup
+
+```powershell
+# Start Minikube
+minikube start --cpus=2 --memory=4096mb --driver=hyperv
+
+# Enable required addons
+minikube addons enable ingress
+minikube addons enable metrics-server
+
+# Configure Docker to use Minikube's Docker daemon
+& minikube -p minikube docker-env --shell powershell | Invoke-Expression
+```
+
+### 3. Database Setup
+
+```powershell
+# Apply database secrets and config
+kubectl apply -f deployment/k8s/secret.yaml
+kubectl apply -f deployment/k8s/configmap.yaml
+
+# Deploy PostgreSQL
+kubectl apply -f deployment/k8s/postgresql.yaml
+
+# Wait for PostgreSQL to be ready
+kubectl wait --for=condition=ready pod -l app=tmf632-postgresql --timeout=300s
+```
+
+### 4. Application Deployment
+
+```powershell
+# Build the application image
+docker build -t tmf632-service:latest .
+
+# Deploy the application
+kubectl apply -f deployment/k8s/deployment.yaml
+kubectl apply -f deployment/k8s/service.yaml
+kubectl apply -f deployment/k8s/ingress.yaml
+
+# Wait for the application to be ready
+kubectl wait --for=condition=ready pod -l app=tmf632-service --timeout=300s
+```
+
+### 5. Monitoring Setup
+
+```powershell
+# Deploy Prometheus and Grafana
+kubectl apply -f deployment/k8s/prometheus.yaml
+kubectl apply -f deployment/k8s/grafana.yaml
+
+# Create monitoring dashboards
+kubectl apply -f deployment/k8s/grafana-dashboards-configmap.yaml
+```
+
+## Testing the Deployment
+
+### 1. Get Service URL
+
+```powershell
+$SERVICE_URL = minikube service tmf632-service --url
+```
+
+### 2. Test API Endpoints
+
+```powershell
+# Variables for testing
+$HEADERS = @{
+    "Content-Type" = "application/json"
+}
+
+# Create Individual
+$CREATE_BODY = @{
+    id = "TEST001"
+    title = "Mr."
+    givenName = "Test"
+    familyName = "User"
+    maritalStatus = "S"
+    gender = "M"
+    nationality = "USA"
+    contactMedium = @(
+        @{
+            type = "PhoneContactMedium"
+            mediumType = "homePhoneNumber"
+            preferred = $true
+            phoneNumber = "1234567890"
+        }
+    )
+} | ConvertTo-Json
+
+$RESPONSE = Invoke-RestMethod `
+    -Method Post `
+    -Uri "$SERVICE_URL/tmf-api/partyManagement/v4/individual" `
+    -Headers $HEADERS `
+    -Body $CREATE_BODY
+
+Write-Host "Created Individual: $($RESPONSE.id)"
+
+# Get Individual
+$GET_RESPONSE = Invoke-RestMethod `
+    -Method Get `
+    -Uri "$SERVICE_URL/tmf-api/partyManagement/v4/individual/$($RESPONSE.id)"
+
+Write-Host "Retrieved Individual: $($GET_RESPONSE.givenName) $($GET_RESPONSE.familyName)"
+```
+
+## Monitoring and Maintenance
+
+### 1. Access Monitoring Dashboards
+
+```powershell
+# Get Prometheus URL
+Write-Host "Prometheus URL: $(minikube service prometheus --url)"
+
+# Get Grafana URL
+Write-Host "Grafana URL: $(minikube service grafana --url)"
+```
+
+### 2. View Application Logs
+
+```powershell
+# Get pod name
+$POD_NAME = kubectl get pods -l app=tmf632-service -o jsonpath="{.items[0].metadata.name}"
+
+# View logs
+kubectl logs $POD_NAME
+```
+
+### 3. Check System Status
+
+```powershell
+# Check all resources
+kubectl get all
+
+# Check specific component status
+kubectl describe deployment tmf632-service
+kubectl describe service tmf632-service
+kubectl describe ingress tmf632-ingress
+```
+
+## Common Issues and Solutions
+
+### 1. Database Connection Issues
+
+If the application can't connect to the database:
+
+```powershell
+# Check database pod status
+kubectl get pods -l app=tmf632-postgresql
+
+# Check database logs
+kubectl logs -l app=tmf632-postgresql
+
+# Verify database secrets
+kubectl describe secret tmf632-secret
+
+# Test database connection from application pod
+$APP_POD = kubectl get pods -l app=tmf632-service -o jsonpath="{.items[0].metadata.name}"
+kubectl exec -it $APP_POD -- sh -c "nc -zv tmf632-postgresql 5432"
+```
+
+### 2. Service Unavailable
+
+If the service is not accessible:
+
+```powershell
+# Check if pods are running
+kubectl get pods
+
+# Check service endpoints
+kubectl get endpoints tmf632-service
+
+# Verify ingress configuration
+kubectl describe ingress tmf632-ingress
+
+# Check service logs
+kubectl logs -l app=tmf632-service
+```
+
+### 3. Performance Issues
+
+If the service is running slowly:
+
+```powershell
+# Check resource usage
+kubectl top pods
+kubectl top nodes
+
+# View detailed metrics in Prometheus/Grafana
+Write-Host "Access Grafana at: $(minikube service grafana --url)"
+```
+
+## Cleanup
+
+### 1. Remove Application
+
+```powershell
+# Delete all resources
+kubectl delete -f deployment/k8s/
+
+# Verify resources are removed
+kubectl get all
+```
+
+### 2. Stop Minikube
+
+```powershell
+# Stop Minikube
+minikube stop
+
+# Optional: Delete Minikube cluster
+minikube delete
+```
+
+## Additional Resources
+
+### API Documentation
+- Swagger UI: `$SERVICE_URL/swagger/index.html`
+- Postman Collection: `test/api/postman/TMF632_Collection.json`
+
+### Monitoring
+- Prometheus Metrics: `$SERVICE_URL/metrics`
+- Grafana Dashboards: See `deployment/docker/grafana/dashboards/`
+
+### Source Code
+- Main Application: `cmd/server/main.go`
+- Database Models: `internal/models/`
+- API Handlers: `internal/handlers/`
+- Configuration: `internal/config/`
+
+### Testing
+- Unit Tests: `test/`
+- Performance Tests: `test/performance/k6/`
+- Integration Tests: `test/integration/`

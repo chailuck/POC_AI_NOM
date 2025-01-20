@@ -1,0 +1,342 @@
+// api/swagger/swagger.yaml (continued)
+        '201':
+          description: Individual created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Individual'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: List individuals
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of individuals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Individual'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tmf-api/partyManagement/v4/individual/{id}:
+    get:
+      summary: Get individual by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Individual found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Individual'
+        '404':
+          description: Individual not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    put:
+      summary: Update individual
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Individual'
+      responses:
+        '200':
+          description: Individual updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Individual'
+        '404':
+          description: Individual not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete individual
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Individual deleted successfully
+        '404':
+          description: Individual not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Individual:
+      type: object
+      required:
+        - id
+        - givenName
+      properties:
+        id:
+          type: string
+        href:
+          type: string
+        title:
+          type: string
+        givenName:
+          type: string
+        familyName:
+          type: string
+        maritalStatus:
+          type: string
+          enum: [S, M, D, W]
+        gender:
+          type: string
+          enum: [M, F, O]
+        nameType:
+          type: string
+        nationality:
+          type: string
+        contactMedium:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactMedium'
+        externalReference:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalReference'
+        individualIdentification:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndividualIdentification'
+        partyCharacteristic:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyCharacteristic'
+
+    ContactMedium:
+      type: object
+      required:
+        - type
+        - mediumType
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        mediumType:
+          type: string
+        preferred:
+          type: boolean
+        phoneNumber:
+          type: string
+        street1:
+          type: string
+        street2:
+          type: string
+        city:
+          type: string
+        stateOrProvince:
+          type: string
+        country:
+          type: string
+        postCode:
+          type: string
+
+    ExternalReference:
+      type: object
+      required:
+        - name
+        - externalIdentifierType
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        externalIdentifierType:
+          type: string
+        type:
+          type: string
+
+    IndividualIdentification:
+      type: object
+      required:
+        - identificationType
+        - identificationId
+      properties:
+        id:
+          type: string
+        identificationType:
+          type: string
+        identificationId:
+          type: string
+        validForEnd:
+          type: string
+          format: date-time
+
+    PartyCharacteristic:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        value:
+          type: string
+        valueType:
+          type: string
+        type:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+
+// test/performance/k6/config.js
+export const config = {
+    baseUrl: __ENV.BASE_URL || 'http://localhost:8080',
+    stages: [
+        { duration: '1m', target: 10 },  // Ramp up to 10 users
+        { duration: '3m', target: 10 },  // Stay at 10 users
+        { duration: '1m', target: 20 },  // Ramp up to 20 users
+        { duration: '3m', target: 20 },  // Stay at 20 users
+        { duration: '1m', target: 0 },   // Ramp down to 0 users
+    ],
+    thresholds: {
+        http_req_duration: ['p(95)<500'], // 95% of requests should be below 500ms
+        http_req_failed: ['rate<0.01'],   // Less than 1% of requests should fail
+    },
+};
+
+// test/performance/k6/scenarios.js
+import { check, sleep } from 'k6';
+import http from 'k6/http';
+import { config } from './config.js';
+
+export let options = {
+    stages: config.stages,
+    thresholds: config.thresholds,
+};
+
+const baseUrl = config.baseUrl;
+
+export function setup() {
+    // Create test data
+    const individual = {
+        id: 'PERF_TEST_001',
+        title: 'Mr.',
+        givenName: 'Performance',
+        familyName: 'Test',
+        maritalStatus: 'S',
+        gender: 'M',
+        nationality: 'USA',
+    };
+
+    const res = http.post(
+        `${baseUrl}/tmf-api/partyManagement/v4/individual`,
+        JSON.stringify(individual),
+        { headers: { 'Content-Type': 'application/json' } }
+    );
+
+    check(res, {
+        'setup created individual': (r) => r.status === 201,
+    });
+
+    return { individualId: individual.id };
+}
+
+export default function(data) {
+    // Get individual
+    const getRes = http.get(
+        `${baseUrl}/tmf-api/partyManagement/v4/individual/${data.individualId}`
+    );
+
+    check(getRes, {
+        'get individual status is 200': (r) => r.status === 200,
+        'get individual has correct id': (r) => r.json('id') === data.individualId,
+    });
+
+    sleep(1);
+
+    // List individuals
+    const listRes = http.get(
+        `${baseUrl}/tmf-api/partyManagement/v4/individual`
+    );
+
+    check(listRes, {
+        'list individuals status is 200': (r) => r.status === 200,
+        'list individuals returns array': (r) => Array.isArray(r.json()),
+    });
+
+    sleep(1);
+}
+
+export function teardown(data) {
+    // Cleanup test data
+    const delRes = http.del(
+        `${baseUrl}/tmf-api/partyManagement/v4/individual/${data.individualId}`
+    );
+
+    check(delRes, {
+        'teardown deleted individual': (r) => r.status === 204,
+    });
+}

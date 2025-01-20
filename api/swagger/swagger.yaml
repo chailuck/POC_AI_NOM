@@ -1,0 +1,268 @@
+// api/swagger/swagger.yaml
+openapi: 3.0.0
+info:
+  title: TMF632 Party Management API
+  version: 4.0.0
+  description: TMF632 Party Management API implementation
+paths:
+  /tmf-api/partyManagement/v4/individual:
+    post:
+      summary: Create individual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Individual'
+      responses:
+        '201':
+          description: Individual created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Individual'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: List individuals
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of individuals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Individual'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tmf-api/partyManagement/v4/individual/{id}:
+    get:
+      summary: Get individual by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Individual found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Individual'
+        '404':
+          description: Individual not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    put:
+      summary: Update individual
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Individual'
+      responses:
+        '200':
+          description: Individual updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Individual'
+        '404':
+          description: Individual not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete individual
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Individual deleted successfully
+        '404':
+          description: Individual not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Individual:
+      type: object
+      required:
+        - id
+        - givenName
+      properties:
+        id:
+          type: string
+        href:
+          type: string
+        title:
+          type: string
+        givenName:
+          type: string
+        familyName:
+          type: string
+        maritalStatus:
+          type: string
+          enum: [S, M, D, W]
+        gender:
+          type: string
+          enum: [M, F, O]
+        nameType:
+          type: string
+        nationality:
+          type: string
+        contactMedium:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactMedium'
+        externalReference:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalReference'
+        individualIdentification:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndividualIdentification'
+        partyCharacteristic:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyCharacteristic'
+
+    ContactMedium:
+      type: object
+      required:
+        - type
+        - mediumType
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        mediumType:
+          type: string
+        preferred:
+          type: boolean
+        phoneNumber:
+          type: string
+        street1:
+          type: string
+        street2:
+          type: string
+        city:
+          type: string
+        stateOrProvince:
+          type: string
+        country:
+          type: string
+        postCode:
+          type: string
+
+    ExternalReference:
+      type: object
+      required:
+        - name
+        - externalIdentifierType
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        externalIdentifierType:
+          type: string
+        type:
+          type: string
+
+    IndividualIdentification:
+      type: object
+      required:
+        - identificationType
+        - identificationId
+      properties:
+        id:
+          type: string
+        identificationType:
+          type: string
+        identificationId:
+          type: string
+        validForEnd:
+          type: string
+          format: date-time
+
+    PartyCharacteristic:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        value:
+          type: string
+        valueType:
+          type: string
+        type:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string

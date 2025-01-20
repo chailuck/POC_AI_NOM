@@ -1,0 +1,200 @@
+// scripts/dev_setup.ps1
+# PowerShell script for local development setup
+Write-Host "Setting up local development environment..."
+
+# Check if Go is installed
+if (!(Get-Command go -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Go..."
+    choco install golang
+}
+
+# Check if Docker Desktop is installed
+if (!(Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Docker Desktop..."
+    choco install docker-desktop
+}
+
+# Install development tools
+Write-Host "Installing development tools..."
+go install github.com/cosmtrek/air@latest
+go install github.com/swaggo/swag/cmd/swag@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Create development database
+Write-Host "Setting up development database..."
+docker compose up -d db
+
+# Install dependencies
+Write-Host "Installing project dependencies..."
+go mod download
+go mod tidy
+
+Write-Host "Development environment setup complete!"
+
+// scripts/run_dev.ps1
+# PowerShell script for running the application in development mode
+Write-Host "Starting development server..."
+
+# Start the application using air for hot reload
+air
+
+// .air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main ./cmd/server"
+  bin = "tmp/main"
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "vendor", "test"]
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  exclude_regex = ["_test.go"]
+
+[screen]
+  clear_on_rebuild = true
+
+// scripts/test_all.ps1
+# PowerShell script for running all tests
+Write-Host "Running all tests..."
+
+# Run unit tests
+Write-Host "Running unit tests..."
+go test -v ./...
+
+# Run integration tests
+Write-Host "Running integration tests..."
+go test -v -tags=integration ./test/integration/...
+
+# Run performance tests
+Write-Host "Running performance tests..."
+k6 run test/performance/k6/scenarios.js
+
+Write-Host "All tests completed!"
+
+// Makefile additions
+.PHONY: dev test-all generate-docs
+
+dev:
+	air
+
+test-all:
+	powershell -File scripts/test_all.ps1
+
+generate-docs:
+	swag init -g cmd/server/main.go -o api/swagger
+
+lint:
+	golangci-lint run
+
+// README.md additions
+## Local Development
+
+### Prerequisites
+- Go 1.21 or later
+- Docker Desktop
+- PowerShell
+
+### Setting Up Development Environment
+
+1. Run the development setup script:
+```powershell
+.\scripts\dev_setup.ps1
+```
+
+2. Start the development server:
+```powershell
+.\scripts\run_dev.ps1
+```
+
+### Running Tests
+
+To run all tests (unit, integration, and performance):
+```powershell
+.\scripts\test_all.ps1
+```
+
+### API Documentation
+
+Generate Swagger documentation:
+```powershell
+make generate-docs
+```
+
+Access the Swagger UI at: http://localhost:8080/swagger/index.html
+
+### Testing with curl
+
+1. Create an individual:
+```powershell
+$headers = @{
+    "Content-Type" = "application/json"
+}
+
+$body = @{
+    id = "PATY000001"
+    title = "Mr."
+    givenName = "John"
+    familyName = "Doe"
+    maritalStatus = "S"
+    gender = "M"
+    nationality = "USA"
+    contactMedium = @(
+        @{
+            type = "PhoneContactMedium"
+            mediumType = "homePhoneNumber"
+            preferred = $true
+            phoneNumber = "1234567890"
+        }
+    )
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/tmf-api/partyManagement/v4/individual" -Headers $headers -Body $body
+```
+
+2. Get an individual:
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:8080/tmf-api/partyManagement/v4/individual/PATY000001"
+```
+
+3. Update an individual:
+```powershell
+$updateBody = @{
+    title = "Dr."
+    givenName = "John"
+    familyName = "Doe"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Put -Uri "http://localhost:8080/tmf-api/partyManagement/v4/individual/PATY000001" -Headers $headers -Body $updateBody
+```
+
+4. Delete an individual:
+```powershell
+Invoke-RestMethod -Method Delete -Uri "http://localhost:8080/tmf-api/partyManagement/v4/individual/PATY000001"
+```
+
+### Monitoring
+
+Access monitoring dashboards:
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+
+Default Grafana credentials:
+- Username: admin
+- Password: admin
+
+### Troubleshooting
+
+1. If the application fails to start:
+   - Check if PostgreSQL is running: `docker ps`
+   - Check application logs: `docker compose logs app`
+   - Verify database connection: `docker compose exec db psql -U postgres -d tmf632db -c "\l"`
+
+2. If tests fail:
+   - Check test logs: `go test -v ./... 2>&1 | Tee-Object -FilePath test.log`
+   - Verify database connection for integration tests
+   - Check if required services are running
+
+3. If Swagger documentation is not accessible:
+   - Regenerate documentation: `make generate-docs`
+   - Verify server is running
+   - Check application logs for errors

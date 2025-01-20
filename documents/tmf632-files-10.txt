@@ -1,0 +1,264 @@
+# Performance Testing and Monitoring Guide
+
+## Performance Testing with k6
+
+### 1. Install k6
+
+```powershell
+# Install k6 using Chocolatey
+choco install k6
+```
+
+### 2. Run Performance Tests
+
+```powershell
+# Get service URL
+$SERVICE_URL = minikube service tmf632-service --url
+
+# Run basic performance test
+k6 run ./test/performance/k6/scenarios.js
+
+# Run with custom configuration
+k6 run --vus 10 --duration 30s ./test/performance/k6/scenarios.js
+
+# Run with environment variables
+$env:BASE_URL="$SERVICE_URL"; k6 run ./test/performance/k6/scenarios.js
+```
+
+### 3. Performance Test Scenarios
+
+The test suite includes:
+
+1. Base Load Test:
+```powershell
+k6 run ./test/performance/k6/base_load.js
+```
+- Simulates normal usage patterns
+- Ramps up to 10 concurrent users
+- Runs for 5 minutes
+
+2. Stress Test:
+```powershell
+k6 run ./test/performance/k6/stress_test.js
+```
+- Tests system under high load
+- Ramps up to 50 concurrent users
+- Runs for 10 minutes
+
+3. Soak Test:
+```powershell
+k6 run ./test/performance/k6/soak_test.js
+```
+- Tests system stability over time
+- Maintains 20 concurrent users
+- Runs for 1 hour
+
+## Monitoring Setup
+
+### 1. Deploy Monitoring Stack
+
+```powershell
+# Apply monitoring configurations
+kubectl apply -f deployment/k8s/prometheus.yaml
+kubectl apply -f deployment/k8s/grafana.yaml
+
+# Wait for pods to be ready
+kubectl wait --for=condition=ready pod -l app=prometheus --timeout=300s
+kubectl wait --for=condition=ready pod -l app=grafana --timeout=300s
+```
+
+### 2. Access Monitoring Dashboards
+
+```powershell
+# Get Prometheus URL
+$PROMETHEUS_URL = minikube service prometheus --url
+Write-Host "Prometheus URL: $PROMETHEUS_URL"
+
+# Get Grafana URL
+$GRAFANA_URL = minikube service grafana --url
+Write-Host "Grafana URL: $GRAFANA_URL"
+```
+
+### 3. Configure Grafana
+
+1. Login to Grafana:
+   - URL: $GRAFANA_URL
+   - Default credentials:
+     - Username: admin
+     - Password: admin
+
+2. Add Prometheus Data Source:
+   - Configuration > Data Sources > Add data source
+   - Select Prometheus
+   - URL: http://prometheus:9090
+   - Click "Save & Test"
+
+3. Import Dashboards:
+   - Create > Import
+   - Upload JSON file: `deployment/docker/grafana/dashboards/tmf632.json`
+
+## Metrics and Alerts
+
+### Key Metrics Monitored
+
+1. Application Metrics:
+   - Request rate
+   - Response time (p50, p95, p99)
+   - Error rate
+   - Success rate by endpoint
+
+2. Database Metrics:
+   - Query response time
+   - Connection pool utilization
+   - Active connections
+   - Query cache hit rate
+
+3. System Metrics:
+   - CPU usage
+   - Memory usage
+   - Network I/O
+   - Disk I/O
+
+### Alert Rules
+
+1. High Response Time:
+```yaml
+- alert: HighResponseTime
+  expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: High response time (instance {{ $labels.instance }})
+    description: 95th percentile of response time is above 500ms
+```
+
+2. High Error Rate:
+```yaml
+- alert: HighErrorRate
+  expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: High error rate (instance {{ $labels.instance }})
+    description: Error rate is above 5% for more than 5 minutes
+```
+
+3. Database Connection Issues:
+```yaml
+- alert: DatabaseConnectionIssues
+  expr: pg_stat_activity_count{state="active"} > 100
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: High number of active database connections
+    description: More than 100 active database connections
+```
+
+## Performance Optimization Tips
+
+1. Database Optimization:
+```sql
+-- Add indexes for common queries
+CREATE INDEX idx_individual_search ON individuals (given_name, family_name);
+
+-- Analyze table statistics
+ANALYZE individuals;
+
+-- Monitor slow queries
+SELECT * FROM pg_stat_activity WHERE state = 'active' AND query_start < now() - interval '1 minute';
+```
+
+2. Application Configuration:
+```yaml
+# Optimize connection pool
+DB_MAX_OPEN_CONNS: 25
+DB_MAX_IDLE_CONNS: 5
+DB_CONN_MAX_LIFETIME: 5m
+
+# Enable response compression
+ENABLE_COMPRESSION: true
+COMPRESSION_LEVEL: 5
+
+# Cache configuration
+CACHE_TTL: 5m
+CACHE_SIZE: 1000
+```
+
+3. Kubernetes Resources:
+```yaml
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+```
+
+## Troubleshooting Performance Issues
+
+1. High Response Time:
+```powershell
+# Check application logs for slow requests
+kubectl logs -l app=tmf632-service | Select-String "duration"
+
+# Monitor database performance
+kubectl exec -it $(kubectl get pod -l app=tmf632-postgresql -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -c "SELECT * FROM pg_stat_activity;"
+```
+
+2. Memory Issues:
+```powershell
+# Check memory usage
+kubectl top pods
+
+# View detailed memory metrics
+kubectl exec -it $(kubectl get pod -l app=tmf632-service -o jsonpath='{.items[0].metadata.name}') -- go tool pprof -http=:8080 /debug/pprof/heap
+```
+
+3. CPU Issues:
+```powershell
+# Check CPU usage
+kubectl top pods --containers
+
+# Profile CPU usage
+kubectl exec -it $(kubectl get pod -l app=tmf632-service -o jsonpath='{.items[0].metadata.name}') -- go tool pprof -http=:8080 /debug/pprof/profile
+```
+
+## Regular Maintenance Tasks
+
+1. Database Maintenance:
+```sql
+-- Vacuum database
+VACUUM ANALYZE;
+
+-- Update statistics
+ANALYZE individuals;
+ANALYZE contact_media;
+ANALYZE external_references;
+```
+
+2. Log Rotation:
+```yaml
+# logrotate configuration
+/var/log/tmf632/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 tmf632 tmf632
+}
+```
+
+3. Backup Strategy:
+```powershell
+# Backup database
+kubectl exec -it $(kubectl get pod -l app=tmf632-postgresql -o jsonpath='{.items[0].metadata.name}') -- pg_dump -U postgres tmf632db > backup.sql
+
+# Restore database
+kubectl exec -it $(kubectl get pod -l app=tmf632-postgresql -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres tmf632db < backup.sql
+```

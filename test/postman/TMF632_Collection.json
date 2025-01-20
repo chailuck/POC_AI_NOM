@@ -1,0 +1,68 @@
+// test/api/postman/TMF632_Collection.json
+{
+	"info": {
+		"_postman_id": "unique-id-here",
+		"name": "TMF632 Party Management API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Individual",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"PATY000001\",\n    \"title\": \"Mr.\",\n    \"givenName\": \"John\",\n    \"familyName\": \"Doe\",\n    \"maritalStatus\": \"S\",\n    \"gender\": \"M\",\n    \"nationality\": \"USA\",\n    \"contactMedium\": [\n        {\n            \"type\": \"PhoneContactMedium\",\n            \"mediumType\": \"homePhoneNumber\",\n            \"preferred\": true,\n            \"phoneNumber\": \"1234567890\"\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/tmf-api/partyManagement/v4/individual",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"tmf-api",
+						"partyManagement",
+						"v4",
+						"individual"
+					]
+				}
+			}
+		},
+		{
+			"name": "Get Individual",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/tmf-api/partyManagement/v4/individual/{{individualId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"tmf-api",
+						"partyManagement",
+						"v4",
+						"individual",
+						"{{individualId}}"
+					]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080"
+		},
+		{
+			"key": "individualId",
+			"value": "PATY000001"
+		}
+	]
+}
